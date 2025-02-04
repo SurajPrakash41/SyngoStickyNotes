@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sticky Board</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            transition: background 0.3s, color 0.3s;
+        }
+        .dark-mode {
+            background-color: #121212;
+            color: white;
+        }
+        .form-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        .dark-mode .form-container {
+            background: #1e1e1e;
+        }
+        input, select, button {
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        .toggle-btn {
+            margin-bottom: 15px;
+            padding: 10px 20px;
+            background: none;
+            color: #4caf50;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        .sticky-board {
+            position: relative;
+            width: 80%;
+            height: 600px;
+            display: flex;
+            flex-wrap: wrap;
+            align-content: flex-start;
+            gap: 20px;
+            padding: 10px;
+        }
+        .sticky-note {
+            padding: 15px;
+            width: 200px;
+            min-height: 150px;
+            border-radius: 5px;
+            box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.3);
+            background: #ffeb3b;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            text-align: center;
+            cursor: grab;
+            position: relative;
+            user-select: text;
+            transition: transform 0.2s;
+        }
+        .pinned {
+            transform: scale(1.1);
+            z-index: 10;
+        }
+        .delete-btn, .edit-btn, .pin-btn {
+            position: absolute;
+            top: 5px;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        .delete-btn {
+            right: 5px;
+            background-color: red;
+            color: white;
+        }
+        .edit-btn {
+            right: 35px;
+            background: none;
+            color: blue;
+        }
+        .pin-btn {
+            right: 65px;
+            background: none;
+            color: green;
+        }
+
+        .purpose-highlight {
+            display: inline-block;
+            padding: 5px 15px;
+            border: 2px solid red;
+            border-radius: 50px;
+            color: red;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .dark-mode .sticky-note {
+            background: #444;
+            color: white;
+        }
+
+        /* Confirmation pop-up style */
+        .confirmation-popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #ffeb3b;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            width: 250px;
+            text-align: center;
+            z-index: 1000;
+        }
+        .confirmation-popup button {
+            margin-top: 10px;
+            padding: 5px 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            cursor: pointer;
+        }
+        .confirmation-popup .cancel-btn {
+            background: #f44336;
+            color: white;
+        }
+        .confirmation-popup .confirm-btn {
+            background: #4caf50;
+            color: white;
+        }
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+        }
+    </style>
+</head>
+<body>
+    <button class="toggle-btn" onclick="toggleDarkMode()">🌙 / ☀️</button>
+
+    <div class="form-container">
+        <input type="text" id="imageRef" placeholder="Image Reference" required>
+        <input type="text" id="hostname" placeholder="Hostname" required>
+        <input type="text" id="ipAddress" placeholder="IP Address" required>
+        <input type="text" id="purpose" placeholder="Purpose" required>
+        <select id="type">
+            <option value="Client">Client</option>
+            <option value="Server">Server</option>
+        </select>
+        <button onclick="addStickyNote()">Add</button>
+    </div>
+    <div class="sticky-board" id="stickyBoard"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            loadStickyNotes();
+            loadDarkMode();
+        });
+
+        function loadStickyNotes() {
+            const savedNotes = JSON.parse(localStorage.getItem('stickyNotes')) || [];
+            savedNotes.forEach(noteData => createStickyNote(noteData));
+        }
+
+        function addStickyNote() {
+            const imageRef = document.getElementById('imageRef').value;
+            const hostname = document.getElementById('hostname').value;
+            const ipAddress = document.getElementById('ipAddress').value;
+            const purpose = document.getElementById('purpose').value;
+            const type = document.getElementById('type').value;
+
+            if (!imageRef || !hostname || !ipAddress || !purpose) {
+                alert('Please fill all fields');
+                return;
+            }
+
+            const noteData = { imageRef, hostname, ipAddress, purpose, type, id: Date.now(), pinned: false };
+            createStickyNote(noteData);
+            saveStickyNotes();
+        }
+
+        function createStickyNote(noteData) {
+            const { imageRef, hostname, ipAddress, purpose, type, id, pinned } = noteData;
+
+            const note = document.createElement('div');
+            note.classList.add('sticky-note');
+            if (pinned) note.classList.add('pinned');
+            note.id = id;
+
+            note.innerHTML = `
+                <button class="delete-btn" onclick="confirmDelete('${id}')">&times;</button>
+                <button class="edit-btn" onclick="editSticky('${id}')">✎</button>
+                <button class="pin-btn" onclick="pinSticky('${id}')">📌</button>
+                <p><strong>Image Reference:</strong> <span contenteditable="false">${imageRef}</span></p>
+                <p><strong>Hostname:</strong> <span contenteditable="false">${hostname}</span></p>
+                <p><strong>IP:</strong> <span contenteditable="false">${ipAddress}</span></p>
+                <p><strong>Purpose:</strong> <span class="purpose-highlight" contenteditable="false">${purpose}</span></p>
+                <p><strong>Type:</strong> <span contenteditable="false">${type}</span></p>
+            `;
+
+            document.getElementById("stickyBoard").appendChild(note);
+        }
+
+        function deleteSticky(id) {
+            document.getElementById(id).remove();
+            saveStickyNotes();
+            cancelDelete();  // Close the confirmation popup
+        }
+
+        function editSticky(id) {
+            const note = document.getElementById(id);
+            const spans = note.querySelectorAll('span');
+            const editButton = note.querySelector('.edit-btn');
+            const isEditable = spans[0].isContentEditable;
+
+            // Toggle editable mode
+            spans.forEach(span => span.contentEditable = !isEditable);
+
+            // Change the button icon (tick or pencil)
+            editButton.textContent = isEditable ? '✎' : '✔';
+            saveStickyNotes();
+        }
+
+        function pinSticky(id) {
+            const note = document.getElementById(id);
+            note.classList.toggle('pinned');
+            const stickyBoard = document.getElementById("stickyBoard");
+
+            if (note.classList.contains('pinned')) {
+                stickyBoard.prepend(note);
+            } else {
+                stickyBoard.appendChild(note);
+            }
+            saveStickyNotes();
+        }
+
+        function saveStickyNotes() {
+            const notes = [];
+            document.querySelectorAll('.sticky-note').forEach(note => {
+                const spans = note.querySelectorAll('span');
+                const noteData = {
+                    id: note.id,
+                    imageRef: spans[0].innerText,
+                    hostname: spans[1].innerText,
+                    ipAddress: spans[2].innerText,
+                    purpose: spans[3].innerText,
+                    type: spans[4].innerText,
+                    pinned: note.classList.contains('pinned')
+                };
+                notes.push(noteData);
+            });
+
+            localStorage.setItem('stickyNotes', JSON.stringify(notes));
+        }
+
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark-mode');
+            localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
+        }
+
+        function loadDarkMode() {
+            if (localStorage.getItem('darkMode') === 'true') {
+                document.body.classList.add('dark-mode');
+            }
+        }
+
+        function confirmDelete(id) {
+            const overlay = document.createElement('div');
+            overlay.classList.add('overlay');
+            document.body.appendChild(overlay);
+
+            const confirmationPopup = document.createElement('div');
+            confirmationPopup.classList.add('confirmation-popup');
+            confirmationPopup.innerHTML = `
+                <p>Are you sure you want to delete this sticky note?</p>
+                <button class="cancel-btn" onclick="cancelDelete()">Cancel</button>
+                <button class="confirm-btn" onclick="deleteSticky('${id}')">Yes, Delete</button>
+            `;
+            document.body.appendChild(confirmationPopup);
+        }
+
+        function cancelDelete() {
+            document.querySelector('.overlay').remove();
+            document.querySelector('.confirmation-popup').remove();
+        }
+    </script>
+</body>
+</html>
